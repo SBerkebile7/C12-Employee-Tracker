@@ -1,26 +1,14 @@
-// GIVEN a command-line application that accepts user input
-// WHEN I start the application
-// THEN I am presented with the following options: view all departments, view all roles, view all employees, add a department, add a role, add an employee, and update an employee role
-// WHEN I choose to view all departments
-// THEN I am presented with a formatted table showing department names and department ids
-// WHEN I choose to view all roles
-// THEN I am presented with the job title, role id, the department that role belongs to, and the salary for that role
-// WHEN I choose to view all employees
-// THEN I am presented with a formatted table showing employee data, including employee ids, first names, last names, job titles, departments, salaries, and managers that the employees report to
-// WHEN I choose to add a department
-// THEN I am prompted to enter the name of the department and that department is added to the database
-// WHEN I choose to add a role
-// THEN I am prompted to enter the name, salary, and department for the role and that role is added to the database
-// WHEN I choose to add an employee
-// THEN I am prompted to enter the employee’s first name, last name, role, and manager and that employee is added to the database
-// WHEN I choose to update an employee role
-// THEN I am prompted to select an employee to update and their new role and this information is updated in the database 
-
 const mysql = require('mysql2');
 const inquirer = require('inquirer');
 const cTable = require('console.table');
-const Connection = require('mysql2/typings/mysql/lib/Connection');
+const figlet = require('figlet');
 
+figlet('Employee \n Tracker', (err, data) => {
+    if (err) throw err;
+    console.log(data);
+})
+
+// Creates a connection to the mysql database
 const db = mysql.createConnection(
     {
         host: 'localhost',
@@ -36,6 +24,7 @@ db.connect(err => {
     startTracker();
 });
 
+// Function to start the tracker and allow the user to choose what they'd like to do
 function startTracker() {
     inquirer.prompt({
         name: 'action',
@@ -82,36 +71,254 @@ function startTracker() {
                 break;
 
             case "Exit":
-                connection.end()
+                db.end()
                 break;
         }
     });
 };
 
+// Shows all departments
 function viewDepartments() {
-
+    db.query(`SELECT * FROM department`, (err, data) => {
+        if (err) throw err;
+        console.log('Displaying all departments');
+        console.table(data);
+        startTracker();
+    });
 }
 
+// Shows all roles
 function viewRoles() {
-
+    db.query(`SELECT * FROM role`, (err, data) => {
+        if (err) throw err;
+        console.log('Displaying all roles');
+        console.table(data);
+        startTracker();
+    });
 }
 
+// Shows all employees
 function viewEmployees() {
-
+    db.query(`SELECT * FROM employee`, (err, data) => {
+        if (err) throw err;
+        console.log('Displaying all employees');
+        console.table(data);
+        startTracker();
+    });
 }
 
+// Allows user to add departments
 function addDepartment() {
-
+    inquirer.prompt([
+        {
+            name: 'department',
+            type: 'input',
+            message: 'What is the name of the new department?',
+            validate: (value) => {
+                if(value) {
+                    return true;
+                } else {
+                    console.log('Please enter a department name.');
+                }
+            }
+        }
+    ]).then(answer => {
+        db.query(`INSERT INTO department SET ?`, {name: answer.department}, (err) => {
+            if (err) throw err;
+            console.log(`New department ${answer.department} has been added.`);
+            startTracker();
+        })
+    });
 }
 
+// Allows user to add roles
 function addRole() {
+    const sql = `SELECT * FROM department`;
+    db.query(sql, (err, results) => {
+        if (err) throw err;
 
+        inquirer.prompt([
+            {
+                name: 'title',
+                type: 'input',
+                message: 'What is the title for the new role?',
+                validate: (value) => {
+                    if(value) {
+                        return true;
+                    } else {
+                        console.log('Please enter the title.');
+                    }
+                }
+            },
+            {
+                name: 'salary',
+                type: 'input',
+                message: 'What is the salary for the new role?',
+                validate: (value) => {
+                    if(value) {
+                        return true;
+                    } else {
+                        console.log('Please enter the salary.');
+                    }
+                }
+            },
+            {
+                name: 'department',
+                type: 'rawlist',
+                choices: () => {
+                    let deptChoices = [];
+                    for(let i = 0; i < results.length; i++) {
+                        deptChoices.push(results[i].name);
+                    }
+                    return deptChoices;
+                },
+                message: 'What is the department for the new role?',
+            }
+        ]).then(answer => {
+            let chosenDept;
+            for(let i = 0; i < results.length; i++) {
+                if(results[i].name === answer.department) {
+                    chosenDept = results[i];
+                }
+            }
+
+            db.query(`INSERT INTO role SET ?`,
+            {
+                title: answer.title,
+                salary: answer.salary,
+                department_id: chosenDept.id
+            }, (err) => {
+                if (err) throw err;
+                console.log(`New Role ${answer.title} has been added.`);
+                startTracker();
+            })
+        });
+    });
 }
 
+// Allows user to add employees
 function addEmployee() {
+    const sql = `SELECT * FROM employee, role`;
+    db.query(sql, (err, results) => {
+        if (err) throw err;
 
+        inquirer.prompt([
+            {
+                name: 'first',
+                type: 'input',
+                message: 'What is their first name?',
+                validate: (value) => {
+                    if(value) {
+                        return true;
+                    } else {
+                        console.log('Please enter their first name.');
+                    }
+                }
+            },
+            {
+                name: 'last',
+                type: 'input',
+                message: 'What is their last name?',
+                validate: (value) => {
+                    if(value) {
+                        return true;
+                    } else {
+                        console.log('Please enter their last name.');
+                    }
+                }
+            },
+            {
+                name: 'role',
+                type: 'rawlist',
+                choices: () => {
+                    let roleChoices = [];
+                    for(let i = 0; i < results.length; i++) {
+                        roleChoices.push(results[i].title);
+                    }
+                    let freshArray = [...new Set(roleChoices)];
+                    return freshArray;
+                },
+                message: 'What is their role?'
+            },
+        ]).then(answer => {
+            let chosenRole;
+
+            for(let i = 0; i < results.length; i++) {
+                if(results[i].title === answer.role) {
+                    chosenRole = results[i];
+                }
+            }
+
+            db.query(`INSERT INTO employee SET ?`,
+            {
+                first_name: answer.first,
+                last_name: answer.last,
+                role_id: chosenRole.id
+            }, (err) => {
+                if (err) throw err;
+                console.log(`New employee ${answer.first} ${answer.last} has been added to the tracker in a ${answer.role} role.`);
+                startTracker();
+            })
+        })
+    });
 }
 
+// Allows user to update an employees role
 function updateEmployeeRole() {
-    
+    db.query(`SELECT * FROM employee, role`, (err, results) => {
+        if (err) throw err;
+
+        inquirer.prompt([
+            {
+                name: 'employee',
+                type: 'rawlist',
+                choices: () => {
+                    let employeeArray = [];
+                    for(let i = 0; i < results.length; i++) {
+                        employeeArray.push(results[i].last_name);
+                    }
+                    let freshArray = [...new Set(employeeArray)];
+                    return freshArray;
+                },
+                message: 'Which employee needs their role updated?'
+            },
+            {
+                name: 'role',
+                type: 'rawlist',
+                choices: () => {
+                    let roleArray = [];
+                    for(let i = 0; i < results.length; i++) {
+                        roleArray.push(results[i].title);
+                    }
+                    let freshArray = [...new Set(roleArray)];
+                    return freshArray;
+                },
+                message: 'What is their new role?'
+            }
+        ]).then(answer => {
+            let chosenEmp;
+            let chosenRole;
+
+            for(let i = 0; i < results.length; i++) {
+                if(results[i].last_name === answer.employee) {
+                    chosenEmp = results[i];
+                }
+            }
+            for(let i = 0; i < results.length; i++) {
+                if(results[i].title === answer.role) {
+                    chosenRole = results[i];
+                }
+            }
+
+            db.query(`UPDATE employee SET ? WHERE ?`,
+            [
+                {role_id: chosenRole},
+                {last_name: chosenEmp}
+            ], (err) => {
+                if (err) throw err;
+                console.log(`Role has been updated.`);
+                startTracker();
+            })
+        });
+    });
 }
